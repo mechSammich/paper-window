@@ -23,3 +23,42 @@ This project allows the user to use a raspberry pi zero w with an e-paper displa
 6. allows user to toggle task status on selected task
 7. displays current page name in upper left of screen
 8. font size that allows approximately 26 chars per row
+
+# implementation
+
+## how it works
+- Lists every `.md` page on the SilverBullet server (`GET /.fs`) and reads those whose frontmatter `tags` include `paper-window`. Pages are re-read only when their `lastModified` changes.
+- Tasks are markdown checkboxes (`- [ ] text` / `- [x] text`). Toggling a task re-reads the page, flips that one line, and writes it back (`PUT /.fs/<page>.md`). If the task changed on the server, the toggle is refused and the list refreshes.
+- Buttons: next/previous task move the selection (the list scrolls to keep it visible); toggle flips the selected task; next/previous page cycle through the tagged pages.
+- The panel is a Waveshare 2.13" V4 (250x122). Text is wrapped to `chars_per_row` (default 26).
+
+## setup (Raspberry Pi)
+1. Install Raspberry Pi OS Lite and enable SPI (`sudo raspi-config`).
+2. Install the Waveshare e-Paper Raspberry Pi library so `waveshare_epd.epd2in13_V4` is importable (see Waveshare's wiki for the 2.13" V4 hat).
+3. Clone this repo and create a virtualenv:
+   ```sh
+   git clone https://github.com/mechSammich/paper-window.git ~/paper-window
+   cd ~/paper-window
+   python3 -m venv .venv
+   .venv/bin/pip install -e ".[pi]"
+   cp config.example.toml config.toml   # then set server url, username, password
+   ```
+4. Run it: `.venv/bin/python -m paper_window --config config.toml`
+5. Optional autostart: copy `deploy/paper-window.service` to `/etc/systemd/system/`, adjust paths, then `sudo systemctl enable --now paper-window`.
+
+SilverBullet must be started with basic auth matching the config, e.g. `SB_USER=admin:secret`.
+
+## simulate without hardware
+```sh
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m paper_window --config config.example.toml --simulate
+```
+Each frame is written to `simulated-display.png`. Type `j`/`k` for next/previous task, Enter to toggle, `n`/`p` for next/previous page, and `q` to quit.
+
+## tests
+```sh
+.venv/bin/python -m pytest
+```
+
+## button pins
+Defaults are BCM 5 (next task), 6 (previous task), 13 (toggle), 19 (next page), 26 (previous page), each wired to GND. Change them in the `[buttons]` section if your hat uses different pins.
