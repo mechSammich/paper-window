@@ -1,0 +1,14 @@
+[Unit]
+Description=paper-window e-paper task viewer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/paper-window
+ExecStart=/home/pi/paper-window/.venv/bin/python -m paper_window --config /home/pi/paper-window/config.toml
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

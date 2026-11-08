@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paper-window"
+version = "0.1.0"
+description = "An e-paper window into SilverBullet paper-window tasks"
+requires-python = ">=3.9"
+dependencies = [
+    "Pillow>=9.2",
+    "PyYAML>=6.0",
+    "tomli>=1.1; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+# Raspberry Pi hardware: GPIO buttons plus Waveshare's epd2in13_V4 driver
+pi = ["gpiozero>=2.0"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+paper-window = "paper_window.__main__:main"
+
+[tool.setuptools]
+packages = ["paper_window"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

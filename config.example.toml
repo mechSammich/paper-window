@@ -1,0 +1,29 @@
+# Copy to config.toml and adjust for your setup.
+
+[server]
+# SilverBullet base URL, without a trailing path
+url = "http://192.168.1.10:3000"
+# Credentials matching SB_USER=username:password on the SilverBullet server
+username = "admin"
+password = "change-me"
+# Pages whose frontmatter `tags` include this value are shown
+tag = "paper-window"
+# How often to re-check the server for new or changed pages
+refresh_seconds = 300
+timeout_seconds = 10
+
+[display]
+# Optional TTF path. Leave empty to use DejaVu/Liberation Mono when installed.
+font_path = ""
+font_size = 15
+# Characters per row used for word wrapping
+chars_per_row = 26
+
+[buttons]
+# BCM GPIO numbers; buttons are wired between the pin and GND
+next_task = 5
+prev_task = 6
+toggle_task = 13
+next_page = 19
+prev_page = 26
+bounce_seconds = 0.05
