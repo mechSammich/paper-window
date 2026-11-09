@@ -21,9 +21,9 @@ chars_per_row = 26
 
 [buttons]
 # BCM GPIO numbers; buttons are wired between the pin and GND
-next_task = 5
-prev_task = 6
-toggle_task = 13
-next_page = 19
-prev_page = 26
+next_task = 5 # BCM 5, physical header pin 29
+prev_task = 6 # BCM 6, physical header pin 31
+toggle_task = 13 # BCM 13, physical header pin 33
+next_page = 19 # BCM 19, physical header pin 35
+prev_page = 26 # BCM 26, physical header pin 37
 bounce_seconds = 0.05
