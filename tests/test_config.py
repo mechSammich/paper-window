@@ -23,6 +23,12 @@ def test_url_is_required_and_must_be_http():
         parse_config(minimal(url="ftp://example.com"))
 
 
+def test_password_requires_username_unless_token_is_set():
+    with pytest.raises(ConfigError, match="username is required"):
+        parse_config(minimal(password="secret"))
+    assert parse_config(minimal(password="secret", token="token")).server.token == "token"
+
+
 def test_unknown_keys_are_rejected():
     with pytest.raises(ConfigError, match="unknown key"):
         parse_config(minimal(urll="http://x"))
