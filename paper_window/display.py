@@ -12,6 +12,8 @@ from .render import DISPLAY_HEIGHT, DISPLAY_WIDTH
 
 log = logging.getLogger(__name__)
 
+MAX_PARTIAL_REFRESHES = 10
+
 
 class Display(Protocol):
     def show(self, image: Image.Image) -> None: ...
@@ -26,22 +28,36 @@ class EpdDisplay:
         from waveshare_epd import epd2in13_V4
 
         self._epd = epd2in13_V4.EPD()
+        self._initialized = False
+        self._last_frame: tuple[tuple[int, int], bytes] | None = None
+        self._partial_refreshes = 0
 
     def show(self, image: Image.Image) -> None:
         # The driver rotates landscape frames internally, so pass the 250x122 image directly.
-        self._epd.init()
-        self._epd.display(self._epd.getbuffer(image))
-        self._epd.sleep()
+        frame = image.convert("1")
+        key = (frame.size, frame.tobytes())
+        if key == self._last_frame:
+            return
+
+        buffer = self._epd.getbuffer(frame)
+        if not self._initialized:
+            if self._epd.init_fast() != 0:
+                raise RuntimeError("failed to initialize e-paper display")
+            self._initialized = True
+            self._epd.displayPartBaseImage(buffer)
+            self._partial_refreshes = 0
+        elif self._partial_refreshes >= MAX_PARTIAL_REFRESHES:
+            self._epd.displayPartBaseImage(buffer)
+            self._partial_refreshes = 0
+        else:
+            self._epd.displayPartial(buffer)
+            self._partial_refreshes += 1
+        self._last_frame = key
 
     def close(self) -> None:
-        from waveshare_epd import epdconfig
-
-        try:
-            self._epd.init()
-            self._epd.Clear(0xFF)
+        if self._initialized:
             self._epd.sleep()
-        finally:
-            epdconfig.module_exit(cleanup=True)
+            self._initialized = False
 
 
 class SimulatedDisplay:
