@@ -21,6 +21,20 @@ class _AuthenticationError(SilverBulletError):
     """The server rejected a request or redirected it to a login page."""
 
 
+class PreconditionFailedError(SilverBulletError):
+    """The server rejected a write because its If-Match value was stale."""
+
+
+class ConditionalWritesUnsupportedError(SilverBulletError):
+    """The server does not accept conditional writes."""
+
+
+@dataclass(frozen=True)
+class RemotePage:
+    text: str
+    etag: str | None
+
+
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -55,16 +69,27 @@ class SilverBulletClient:
         return f"{self._base}/.fs/{quote(name, safe='/')}"
 
     def _send(
-        self, method: str, url: str, body: bytes | None = None, content_type: str = ""
-    ) -> bytes:
+        self, method: str, url: str, body: bytes | None = None, content_type: str = "",
+        if_match: str | None = None,
+    ) -> tuple[bytes, str | None]:
         headers = dict(self._headers)
         if content_type:
             headers["Content-Type"] = content_type
+        if if_match is not None:
+            headers["If-Match"] = if_match
         request = Request(url, data=body, method=method, headers=headers)
         try:
             with self._opener.open(request, timeout=self._timeout) as response:
-                return response.read()
+                return response.read(), response.headers.get("ETag")
         except HTTPError as exc:
+            if exc.code == 412:
+                raise PreconditionFailedError(
+                    f"{method} {url} failed: HTTP {exc.code}"
+                ) from exc
+            if method == "PUT" and if_match is not None and exc.code in (400, 405, 501):
+                raise ConditionalWritesUnsupportedError(
+                    f"{method} {url} failed: conditional writes are unsupported (HTTP {exc.code})"
+                ) from exc
             if 300 <= exc.code < 400 or exc.code in (401, 403):
                 raise _AuthenticationError(f"{method} {url} failed: HTTP {exc.code}") from exc
             raise SilverBulletError(f"{method} {url} failed: HTTP {exc.code}") from exc
@@ -75,7 +100,9 @@ class SilverBulletClient:
         self._logged_in = False
         self._cookies.clear()
         body = urlencode({"username": self._username, "password": self._password}).encode("utf-8")
-        raw = self._send("POST", f"{self._base}/.auth", body, "application/x-www-form-urlencoded")
+        raw, _ = self._send(
+            "POST", f"{self._base}/.auth", body, "application/x-www-form-urlencoded"
+        )
         try:
             result = json.loads(raw)
         except (ValueError, UnicodeDecodeError) as exc:
@@ -84,20 +111,22 @@ class SilverBulletClient:
             raise SilverBulletError("SilverBullet login failed; check credentials and server authentication")
         self._logged_in = True
 
-    def _request(self, method: str, url: str, body: bytes | None = None) -> bytes:
+    def _request(
+        self, method: str, url: str, body: bytes | None = None, if_match: str | None = None
+    ) -> tuple[bytes, str | None]:
         if self._cookie_mode and not self._logged_in:
             self._login()
         content_type = "text/markdown; charset=utf-8" if body is not None else ""
         try:
-            return self._send(method, url, body, content_type)
+            return self._send(method, url, body, content_type, if_match)
         except _AuthenticationError:
             if not self._cookie_mode:
                 raise
             self._login()
-            return self._send(method, url, body, content_type)
+            return self._send(method, url, body, content_type, if_match)
 
     def list_markdown_files(self) -> list[RemoteFile]:
-        raw = self._request("GET", self._url())
+        raw, _ = self._request("GET", self._url())
         try:
             entries = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:
@@ -114,7 +143,11 @@ class SilverBulletClient:
         return files
 
     def read_page(self, path: str) -> str:
-        return self._request("GET", self._url(path)).decode("utf-8")
+        return self.read_page_with_etag(path).text
 
-    def write_page(self, path: str, text: str) -> None:
-        self._request("PUT", self._url(path), body=text.encode("utf-8"))
+    def read_page_with_etag(self, path: str) -> RemotePage:
+        raw, etag = self._request("GET", self._url(path))
+        return RemotePage(raw.decode("utf-8"), etag)
+
+    def write_page(self, path: str, text: str, if_match: str | None = None) -> None:
+        self._request("PUT", self._url(path), body=text.encode("utf-8"), if_match=if_match)

@@ -31,6 +31,11 @@ class FakeSilverBullet:
         self.token = None
         self.reject_fs = None
         self.login_response = None
+        self.provide_etag = True
+        self.support_conditional_writes = True
+        self.mutate_on_unsupported_write = False
+        self.mutate_before_conditional_put = False
+        self.put_if_match = []
 
     def handler(self):
         fake = self
@@ -52,10 +57,12 @@ class FakeSilverBullet:
                     return False
                 return True
 
-            def _send(self, status, body=b"", content_type="application/json"):
+            def _send(self, status, body=b"", content_type="application/json", etag=None):
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(body)))
+                if etag is not None:
+                    self.send_header("ETag", etag)
                 if status == 302:
                     self.send_header("Location", "/.auth")
                 self.end_headers()
@@ -94,13 +101,29 @@ class FakeSilverBullet:
                 if name not in fake.files:
                     return self._send(404, b"not found", "text/plain")
                 fake.requests.append(("GET", name))
-                self._send(200, fake.files[name]["text"].encode(), "text/markdown")
+                etag = f'"{fake.files[name]["modified"]}"' if fake.provide_etag else None
+                self._send(200, fake.files[name]["text"].encode(), "text/markdown", etag)
 
             def do_PUT(self):
                 assert self.headers["X-Sync-Mode"] == "true"
                 if not self._authorized():
                     return
                 name = unquote(self.path[len("/.fs/"):])
+                if_match = self.headers.get("If-Match")
+                fake.put_if_match.append(if_match)
+                if if_match is not None and not fake.support_conditional_writes:
+                    if fake.mutate_on_unsupported_write:
+                        fake.files[name]["text"] = fake.files[name]["text"].replace(
+                            "first", "newer"
+                        )
+                        fake.files[name]["modified"] += 1
+                    return self._send(501, b"conditional writes unsupported", "text/plain")
+                if if_match is not None and fake.mutate_before_conditional_put:
+                    fake.mutate_before_conditional_put = False
+                    fake.files[name]["text"] = fake.files[name]["text"].replace("first", "newer")
+                    fake.files[name]["modified"] += 1
+                if if_match is not None and if_match != f'"{fake.files[name]["modified"]}"':
+                    return self._send(412, b"precondition failed", "text/plain")
                 length = int(self.headers.get("Content-Length", 0))
                 text = self.rfile.read(length).decode()
                 fake.writes.append((name, text))
@@ -204,6 +227,7 @@ def test_toggle_writes_back_and_updates_page(server):
     assert server.writes[-1][0] == "Work/Inbox.md"
     assert "- [x] first" in server.writes[-1][1].split("\n")
     assert updated.tasks[0].done is True
+    assert server.put_if_match == ['"1"']
 
 
 def test_toggle_detects_task_changed_on_server(server):
@@ -213,3 +237,53 @@ def test_toggle_detects_task_changed_on_server(server):
     with pytest.raises(StaleTaskError):
         index.toggle(page, 0)
     assert server.writes == []
+
+
+def test_conditional_rejection_preserves_newer_edit_and_refreshes(server):
+    index = PageIndex(client_for(server), "paper-window")
+    page = index.refresh()[0]
+    server.mutate_before_conditional_put = True
+
+    with pytest.raises(StaleTaskError, match="page changed"):
+        index.toggle(page, 0)
+
+    assert server.writes == []
+    assert "- [ ] newer" in server.files["Work/Inbox.md"]["text"]
+    refreshed = index.refresh()[0]
+    assert refreshed.tasks[0].text == "newer"
+
+
+def test_toggle_works_without_etag(server):
+    server.provide_etag = False
+    index = PageIndex(client_for(server), "paper-window")
+    page = index.refresh()[0]
+
+    updated = index.toggle(page, 0)
+
+    assert server.put_if_match == [None]
+    assert updated.tasks[0].done is True
+
+
+def test_unsupported_conditional_write_falls_back_after_rechecking(server):
+    server.support_conditional_writes = False
+    index = PageIndex(client_for(server), "paper-window")
+    page = index.refresh()[0]
+
+    updated = index.toggle(page, 0)
+
+    assert server.put_if_match == ['"1"', None]
+    assert updated.tasks[0].done is True
+
+
+def test_unsupported_conditional_write_does_not_overwrite_newer_edit(server):
+    server.support_conditional_writes = False
+    server.mutate_on_unsupported_write = True
+    index = PageIndex(client_for(server), "paper-window")
+    page = index.refresh()[0]
+
+    with pytest.raises(StaleTaskError, match="page changed"):
+        index.toggle(page, 0)
+
+    assert server.put_if_match == ['"1"']
+    assert server.writes == []
+    assert "- [ ] newer" in server.files["Work/Inbox.md"]["text"]

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from .pages import PaperPage, extract_tasks, make_page, toggle_task_line
-from .silverbullet import SilverBulletClient, SilverBulletError
+from .pages import PaperPage, StaleTaskError, extract_tasks, make_page, toggle_task_line
+from .silverbullet import (
+    ConditionalWritesUnsupportedError,
+    PreconditionFailedError,
+    SilverBulletClient,
+    SilverBulletError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -14,8 +19,8 @@ class PageIndex:
     def __init__(self, client: SilverBulletClient, tag: str):
         self._client = client
         self._tag = tag
-        # path -> (lastModified, page or None when the tag is absent)
-        self._cache: dict[str, tuple[int | None, PaperPage | None]] = {}
+        # path -> (lastModified, page or None when the tag is absent, ETag)
+        self._cache: dict[str, tuple[int | None, PaperPage | None, str | None]] = {}
 
     def refresh(self) -> list[PaperPage]:
         """Return all tagged pages, re-reading only files whose lastModified changed."""
@@ -28,11 +33,12 @@ class PageIndex:
                 page = cached[1]
             else:
                 try:
-                    page = make_page(remote.name, self._client.read_page(remote.name), self._tag)
+                    remote_page = self._client.read_page_with_etag(remote.name)
+                    page = make_page(remote.name, remote_page.text, self._tag)
                 except SilverBulletError as exc:
                     log.warning("skipping %s: %s", remote.name, exc)
                     continue
-                self._cache[remote.name] = (remote.last_modified, page)
+                self._cache[remote.name] = (remote.last_modified, page, remote_page.etag)
             if page is not None:
                 pages.append(page)
         self._cache = {path: value for path, value in self._cache.items() if path in seen}
@@ -45,9 +51,19 @@ class PageIndex:
         Raises StaleTaskError if the task moved or changed since it was displayed.
         """
         task = page.tasks[task_index]
-        fresh_text = self._client.read_page(page.path)
-        new_text = toggle_task_line(fresh_text, task.line_index, task.text)
-        self._client.write_page(page.path, new_text)
+        remote_page = self._client.read_page_with_etag(page.path)
+        new_text = toggle_task_line(remote_page.text, task.line_index, task.text)
+        try:
+            self._client.write_page(page.path, new_text, if_match=remote_page.etag)
+        except PreconditionFailedError as exc:
+            self._cache.pop(page.path, None)
+            raise StaleTaskError("page changed while the task was being toggled") from exc
+        except ConditionalWritesUnsupportedError:
+            latest = self._client.read_page_with_etag(page.path)
+            if latest.text != remote_page.text:
+                self._cache.pop(page.path, None)
+                raise StaleTaskError("page changed while conditional writes were unavailable")
+            self._client.write_page(page.path, new_text)
         self._cache.pop(page.path, None)
         updated = make_page(page.path, new_text, self._tag)
         if updated is None:
