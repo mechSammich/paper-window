@@ -3,9 +3,11 @@
 [server]
 # SilverBullet base URL, without a trailing path
 url = "http://192.168.1.10:3000"
-# Credentials matching SB_USER=username:password on the SilverBullet server
+# SilverBullet login credentials (for example, SB_USER=username:password in single-space mode)
 username = "admin"
 password = "change-me"
+# Optional API bearer token; takes precedence over username and password
+token = ""
 # Pages whose frontmatter `tags` include this value are shown
 tag = "paper-window"
 # How often to re-check the server for new or changed pages

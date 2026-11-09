@@ -22,6 +22,7 @@ class ServerConfig:
     url: str
     username: str = ""
     password: str = ""
+    token: str = ""
     tag: str = "paper-window"
     refresh_seconds: int = 300
     timeout_seconds: float = 10.0
@@ -76,6 +77,8 @@ def parse_config(data: dict[str, Any]) -> Config:
     server = _build(ServerConfig, server_data, "server")
     if not server.url.startswith(("http://", "https://")):
         raise ConfigError("[server] url must start with http:// or https://")
+    if server.password and not server.username and not server.token:
+        raise ConfigError("[server] username is required when password is set")
     if server.refresh_seconds < 1:
         raise ConfigError("[server] refresh_seconds must be at least 1")
 

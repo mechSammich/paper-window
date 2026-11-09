@@ -1,10 +1,9 @@
 """Tests against a fake SilverBullet /.fs server running on localhost."""
 
-import base64
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote
 
 import pytest
 
@@ -26,6 +25,12 @@ class FakeSilverBullet:
         self.writes = []
         self.requests = []
         self.auth_headers = []
+        self.login_count = 0
+        self.valid_session = "session-0"
+        self.require_auth = True
+        self.token = None
+        self.reject_fs = None
+        self.login_response = None
 
     def handler(self):
         fake = self
@@ -35,11 +40,15 @@ class FakeSilverBullet:
                 return
 
             def _authorized(self):
-                expected = "Basic " + base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
                 fake.auth_headers.append(self.headers.get("Authorization"))
-                if self.headers.get("Authorization") != expected:
-                    self.send_response(401)
-                    self.end_headers()
+                if fake.reject_fs is not None:
+                    self._send(fake.reject_fs, b"")
+                    return False
+                if fake.require_auth and (
+                    self.headers.get("Cookie") != f"session={fake.valid_session}"
+                    and (not fake.token or self.headers.get("Authorization") != f"Bearer {fake.token}")
+                ):
+                    self._send(401, b"")
                     return False
                 return True
 
@@ -47,10 +56,32 @@ class FakeSilverBullet:
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(body)))
+                if status == 302:
+                    self.send_header("Location", "/.auth")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):
+                assert self.path == "/.auth"
+                assert self.headers["Content-Type"] == "application/x-www-form-urlencoded"
+                assert self.headers["X-Sync-Mode"] == "true"
+                fake.login_count += 1
+                length = int(self.headers.get("Content-Length", 0))
+                form = parse_qs(self.rfile.read(length).decode(), keep_blank_values=True)
+                if fake.login_response is not None:
+                    return self._send(200, fake.login_response)
+                if form.get("username") != [USER] or form.get("password") != [PASSWORD]:
+                    return self._send(200, b'{"status":"error"}')
+                fake.valid_session = f"session-{fake.login_count}"
+                body = b'{"status":"ok"}'
+                self.send_response(200)
+                self.send_header("Set-Cookie", f"session={fake.valid_session}; Path=/; HttpOnly")
+                self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
 
             def do_GET(self):
+                assert self.headers["X-Sync-Mode"] == "true"
                 if not self._authorized():
                     return
                 if self.path == "/.fs":
@@ -66,6 +97,7 @@ class FakeSilverBullet:
                 self._send(200, fake.files[name]["text"].encode(), "text/markdown")
 
             def do_PUT(self):
+                assert self.headers["X-Sync-Mode"] == "true"
                 if not self._authorized():
                     return
                 name = unquote(self.path[len("/.fs/"):])
@@ -100,8 +132,52 @@ def test_list_skips_internal_and_non_markdown_files(server):
 
 
 def test_wrong_password_raises(server):
-    with pytest.raises(SilverBulletError, match="401"):
+    with pytest.raises(SilverBulletError, match="login failed"):
         client_for(server, password="wrong").list_markdown_files()
+    assert server.login_count == 1
+
+
+def test_cookie_session_is_reused_and_refreshed(server):
+    client = client_for(server)
+    client.list_markdown_files()
+    client.read_page("Work/Inbox.md")
+    assert server.login_count == 1
+    server.valid_session = "expired"
+    client.write_page("Work/Inbox.md", TAGGED)
+    assert server.login_count == 2
+    assert server.writes == [("Work/Inbox.md", TAGGED)]
+    assert all(header is None for header in server.auth_headers)
+
+
+@pytest.mark.parametrize("status", [302, 401, 403])
+def test_rejected_request_is_retried_only_once(server, status):
+    server.reject_fs = status
+    with pytest.raises(SilverBulletError, match=f"HTTP {status}"):
+        client_for(server).list_markdown_files()
+    assert server.login_count == 2
+
+
+@pytest.mark.parametrize("response", [b"not json", b"[]", b'{"status":"error"}'])
+def test_invalid_login_response_fails(server, response):
+    server.login_response = response
+    with pytest.raises(SilverBulletError, match="login"):
+        client_for(server).list_markdown_files()
+    assert server.login_count == 1
+
+
+def test_bearer_token_takes_precedence(server):
+    server.token = "test-token"
+    client = SilverBulletClient(server.url, username=USER, password=PASSWORD, token=server.token)
+    client.list_markdown_files()
+    assert server.login_count == 0
+    assert server.auth_headers == ["Bearer test-token"]
+
+
+def test_unauthenticated_server(server):
+    server.require_auth = False
+    SilverBulletClient(server.url).list_markdown_files()
+    assert server.login_count == 0
+    assert server.auth_headers == [None]
 
 
 def test_unreachable_server_raises():

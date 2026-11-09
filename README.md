@@ -46,7 +46,15 @@ This project allows the user to use a raspberry pi zero w with an e-paper displa
 4. Run it: `.venv/bin/python -m paper_window --config config.toml`
 5. Optional autostart: copy `deploy/paper-window.service` to `/etc/systemd/system/`, adjust paths, then `sudo systemctl enable --now paper-window`.
 
-SilverBullet must be started with basic auth matching the config, e.g. `SB_USER=admin:secret`.
+Set `username` and `password` to your SilverBullet login credentials (in single-space mode,
+these match `SB_USER=username:password`). The client logs in at `/.auth` and keeps the
+session cookie in memory, logging in again if the session expires. Alternatively, set
+`token` to a SilverBullet API bearer token; it takes precedence over the login credentials.
+Leave all three empty for an unauthenticated server.
+
+Use HTTPS on untrusted networks: HTTP sends credentials and page contents without encryption.
+HTTPS certificates are verified using the system trust store. Keep `config.toml` private
+because it contains credentials or a token.
 
 ## simulate without hardware
 ```sh

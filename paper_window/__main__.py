@@ -48,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
         config.server.url,
         username=config.server.username,
         password=config.server.password,
+        token=config.server.token,
         timeout=config.server.timeout_seconds,
     )
     index = PageIndex(client, config.server.tag)
