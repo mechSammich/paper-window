@@ -31,6 +31,7 @@ This project allows the user to use a raspberry pi zero w with an e-paper displa
 - Tasks are markdown checkboxes (`- [ ] text` / `- [x] text`). Toggling a task re-reads the page, flips that one line, and writes it back (`PUT /.fs/<page>.md`). If the task changed on the server, the toggle is refused and the list refreshes.
 - Buttons: next/previous task move the selection (the list scrolls to keep it visible); toggle flips the selected task; next/previous page cycle through the tagged pages.
 - The panel is a Waveshare 2.13" V4 (250x122). Text is wrapped to `chars_per_row` (default 26).
+- The e-paper display skips unchanged frames, uses partial updates for changes, and performs a full refresh after ten partial updates to limit ghosting.
 
 ## setup (Raspberry Pi)
 1. Install Raspberry Pi OS Lite and enable SPI (`sudo raspi-config`).
