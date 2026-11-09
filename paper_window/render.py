@@ -76,7 +76,8 @@ class Renderer:
 
         if page is None:
             self._header(draw, "paper-window", "")
-            self._body_message(draw, message or "No tagged pages found", self.body_top)
+            self._body_message(draw, "No tagged pages found", self.body_top)
+            self._footer(draw, message)
             return image, 0
 
         self._header(draw, page.name, f"{page_number}/{page_count}")
@@ -99,27 +100,57 @@ class Renderer:
             if is_selected:
                 draw.rectangle((0, y, self.width - 1, y + block_height - 1), fill=0)
             ink = 255 if is_selected else 0
-            prefix = "[x] " if task.done else "[ ] "
-            indent = draw.textlength(prefix, font=self.font)
+            box_size = max(7, min(10, self.line_height - 6))
+            box_x = 4
+            box_y = y + (self.line_height - box_size) // 2
+            draw.rectangle(
+                (box_x, box_y, box_x + box_size, box_y + box_size),
+                outline=ink,
+                width=1,
+            )
+            if task.done:
+                draw.line(
+                    (
+                        box_x + 2,
+                        box_y + box_size // 2,
+                        box_x + box_size // 2 - 1,
+                        box_y + box_size - 2,
+                    ),
+                    fill=ink,
+                    width=1,
+                )
+                draw.line(
+                    (
+                        box_x + box_size // 2 - 1,
+                        box_y + box_size - 2,
+                        box_x + box_size - 1,
+                        box_y + 2,
+                    ),
+                    fill=ink,
+                    width=1,
+                )
+            indent = draw.textlength("[ ] ", font=self.font)
+            text_x = 2 + indent
             for line_no, line in enumerate(lines):
                 line_y = y + line_no * self.line_height
-                if line_no == 0:
-                    draw.text((2, line_y), prefix + line, font=self.font, fill=ink)
-                else:
-                    draw.text((2 + indent, line_y), line, font=self.font, fill=ink)
+                draw.text((text_x, line_y), line, font=self.font, fill=ink)
             y += block_height
 
         self._footer(draw, message)
         return image, top
 
     def _header(self, draw: ImageDraw.ImageDraw, title: str, right: str) -> None:
+        draw.rectangle((0, 0, self.width - 1, self.line_height), fill=0)
         right_w = draw.textlength(right, font=self.font) if right else 0
         room = self.width - right_w - 8
-        while title and draw.textlength(title, font=self.font) > room:
-            title = title[:-1]
-        draw.text((2, 0), title, font=self.font, fill=0)
+        if draw.textlength(title, font=self.font) > room:
+            while title and draw.textlength(title + "...", font=self.font) > room:
+                title = title[:-1]
+            if title:
+                title += "..."
+        draw.text((2, 1), title, font=self.font, fill=255)
         if right:
-            draw.text((self.width - right_w - 2, 0), right, font=self.font, fill=0)
+            draw.text((self.width - right_w - 2, 1), right, font=self.font, fill=255)
         draw.line((0, self.line_height, self.width, self.line_height), fill=0)
 
     def _body_message(self, draw: ImageDraw.ImageDraw, text: str, y: int) -> None:
@@ -130,9 +161,10 @@ class Renderer:
         if not message:
             return
         y = self.height - self.line_height
-        draw.rectangle((0, y, self.width - 1, self.height - 1), fill=255)
-        draw.line((0, y, self.width, y), fill=0)
+        draw.rectangle((0, y, self.width - 1, self.height - 1), fill=0)
         text = message
-        while text and draw.textlength(text, font=self.font) > self.width - 4:
+        while text and draw.textlength(text + "...", font=self.font) > self.width - 4:
             text = text[:-1]
-        draw.text((2, y + 1), text, font=self.font, fill=0)
+        if text != message:
+            text += "..."
+        draw.text((2, y + 1), text, font=self.font, fill=255)

@@ -71,6 +71,34 @@ def test_renderer_produces_1bit_frame_of_display_size():
     assert top == 0
 
 
+def test_renderer_uses_inverse_header_selection_and_status_bar():
+    renderer = Renderer(load_font("", 15), chars_per_row=26)
+    image, _ = renderer.render(page("Groceries", ["milk", "eggs"]), 1, 2, 1, 0, "Offline")
+    footer_y = renderer.height - renderer.line_height
+    selected_y = renderer.body_top + renderer.line_height
+
+    assert image.getpixel((0, 0)) == 0
+    assert image.getpixel((0, renderer.body_top)) == 255
+    assert image.getpixel((0, selected_y)) == 0
+    assert image.getpixel((0, footer_y)) == 0
+    assert image.crop((0, footer_y, renderer.width, renderer.height)).getbbox()
+
+
+def test_renderer_draws_completed_task_checkbox():
+    renderer = Renderer(load_font("", 15), chars_per_row=26)
+    open_page = page("Tasks", ["done"])
+    done_page = make_page(
+        "Tasks.md",
+        f"---\ntags: [{TAG}]\n---\n- [x] done\n",
+        TAG,
+    )
+    open_image, _ = renderer.render(open_page, 1, 1, 0, 0)
+    done_image, _ = renderer.render(done_page, 1, 1, 0, 0)
+    checkbox = (0, renderer.body_top, 20, renderer.body_top + renderer.line_height)
+
+    assert open_image.crop(checkbox).tobytes() != done_image.crop(checkbox).tobytes()
+
+
 def test_renderer_handles_empty_states():
     renderer = Renderer(load_font("", 15), chars_per_row=26)
     assert renderer.render(None, 0, 0, 0, 0)[0].size == (250, 122)
