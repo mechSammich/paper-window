@@ -49,6 +49,21 @@ def test_replace_page_updates_matching_path():
     assert len(browser.current_page.tasks) == 2
 
 
+def test_replace_page_keeps_selected_task_when_completion_reorders_it():
+    browser = Browser()
+    before = make_page("Tasks.md", f"---\ntags: [{TAG}]\n---\n- [ ] first\n- [ ] second\n", TAG)
+    after = make_page("Tasks.md", f"---\ntags: [{TAG}]\n---\n- [x] first\n- [ ] second\n", TAG)
+    browser.set_pages([before])
+
+    browser.replace_page(after)
+    assert browser.task_index == 1
+    assert browser.selected_task.text == "first"
+
+    browser.replace_page(before)
+    assert browser.task_index == 0
+    assert browser.selected_task.text == "first"
+
+
 def test_wrap_task_limits_row_width():
     lines = wrap_task("buy oat milk and two loaves of sourdough bread from the shop", 22)
     assert all(len(line) <= 22 for line in lines)
@@ -84,19 +99,19 @@ def test_renderer_uses_inverse_header_selection_and_status_bar():
     assert image.crop((0, footer_y, renderer.width, renderer.height)).getbbox()
 
 
-def test_renderer_excludes_completed_tasks():
+def test_renderer_draws_completed_task_checkbox():
     renderer = Renderer(load_font("", 15), chars_per_row=26)
-    with_completed = make_page(
+    open_page = page("Tasks", ["done"])
+    done_page = make_page(
         "Tasks.md",
-        f"---\ntags: [{TAG}]\n---\n- [ ] open\n- [x] done\n",
+        f"---\ntags: [{TAG}]\n---\n- [x] done\n",
         TAG,
     )
-    open_only = page("Tasks", ["open"])
+    open_image, _ = renderer.render(open_page, 1, 1, 0, 0)
+    done_image, _ = renderer.render(done_page, 1, 1, 0, 0)
+    checkbox = (0, renderer.body_top, 20, renderer.body_top + renderer.line_height)
 
-    image_with_completed, _ = renderer.render(with_completed, 1, 1, 0, 0)
-    open_only_image, _ = renderer.render(open_only, 1, 1, 0, 0)
-
-    assert image_with_completed.tobytes() == open_only_image.tobytes()
+    assert open_image.crop(checkbox).tobytes() != done_image.crop(checkbox).tobytes()
 
 
 def test_renderer_hides_silverbullet_tags_from_task_text():
@@ -151,7 +166,7 @@ def test_app_toggles_task_and_redraws(tmp_path):
         assert fake.files["Work/Inbox.md"]["text"].count("- [x] first") == 1
         assert out.exists()
         app._handle(Action.NEXT_TASK)
-        assert app._browser.selected_task is None
+        assert app._browser.selected_task.text == "second"
     finally:
         httpd.shutdown()
         httpd.server_close()

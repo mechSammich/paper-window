@@ -41,6 +41,8 @@ def test_extract_tasks_reports_line_index_and_state():
     assert [(t.line_index, t.text, t.done) for t in tasks] == [
         (5, "buy milk", False),
         (7, "nested item", False),
+        (6, "pick up parcel", True),
+        (9, "shouted done", True),
     ]
 
 

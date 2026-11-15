@@ -65,9 +65,9 @@ def extract_tasks(text: str) -> tuple[Task, ...]:
     tasks = []
     for index in range(_body_start(text), len(lines)):
         match = TASK_RE.match(lines[index])
-        if match and match.group(1).lower() != "x":
-            tasks.append(Task(index, match.group(2), False))
-    return tuple(tasks)
+        if match:
+            tasks.append(Task(index, match.group(2), match.group(1).lower() == "x"))
+    return tuple(sorted(tasks, key=lambda task: task.done))
 
 
 def strip_silverbullet_tags(text: str) -> str:

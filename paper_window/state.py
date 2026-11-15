@@ -42,8 +42,14 @@ class Browser:
     def replace_page(self, page: PaperPage) -> None:
         for index, existing in enumerate(self.pages):
             if existing.path == page.path:
+                selected = self.selected_task if index == self.page_index else None
                 self.pages[index] = page
                 self._clamp_task()
+                if selected is not None:
+                    for task_index, task in enumerate(page.tasks):
+                        if task.line_index == selected.line_index and task.text == selected.text:
+                            self.task_index = task_index
+                            break
                 return
 
     def next_page(self) -> None:
