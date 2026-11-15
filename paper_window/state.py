@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from .pages import PaperPage, Task
+from .pages import PaperPage, TagPage, Task
 
 
 @dataclass
 class Browser:
-    pages: list[PaperPage] = field(default_factory=list)
+    pages: list[PaperPage | TagPage] = field(default_factory=list)
     page_index: int = 0
     task_index: int = 0
     scroll_top: int = 0
 
     @property
-    def current_page(self) -> PaperPage | None:
+    def current_page(self) -> PaperPage | TagPage | None:
         if not self.pages:
             return None
         return self.pages[self.page_index]
@@ -27,12 +28,12 @@ class Browser:
             return None
         return page.tasks[self.task_index]
 
-    def set_pages(self, pages: list[PaperPage]) -> None:
+    def set_pages(self, pages: Sequence[PaperPage | TagPage]) -> None:
         """Replace the page list, keeping the current page selected when it still exists."""
         current_page = self.current_page
         current_path = current_page.path if current_page else None
         selected_task = self.selected_task
-        self.pages = pages
+        self.pages = list(pages)
         self.page_index = 0
         if current_path is not None:
             for index, page in enumerate(pages):
@@ -43,7 +44,9 @@ class Browser:
         if current_path is not None and self.current_page and self.current_page.path == current_path:
             if selected_task is not None:
                 for task_index, task in enumerate(self.current_page.tasks):
-                    if task.line_index == selected_task.line_index and task.text == selected_task.text:
+                    if (task.source_path, task.line_index, task.text) == (
+                        selected_task.source_path, selected_task.line_index, selected_task.text
+                    ):
                         self.task_index = task_index
                         break
 
@@ -55,7 +58,9 @@ class Browser:
                 self._clamp_task()
                 if selected is not None:
                     for task_index, task in enumerate(page.tasks):
-                        if task.line_index == selected.line_index and task.text == selected.text:
+                        if (task.source_path, task.line_index, task.text) == (
+                            selected.source_path, selected.line_index, selected.text
+                        ):
                             self.task_index = task_index
                             break
                 return

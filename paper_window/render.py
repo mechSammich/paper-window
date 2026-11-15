@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .pages import PaperPage, format_task_text
+from .pages import PaperPage, TagPage, format_task_text
 
 DISPLAY_WIDTH = 250
 DISPLAY_HEIGHT = 122
@@ -66,7 +66,7 @@ class Renderer:
 
     def render(
         self,
-        page: PaperPage | None,
+        page: PaperPage | TagPage | None,
         page_number: int,
         page_count: int,
         selected: int,
@@ -81,7 +81,7 @@ class Renderer:
 
         if page is None:
             self._header(draw, "paper-window", "")
-            self._body_message(draw, "No tagged pages found", self.body_top)
+            self._body_message(draw, "No tasks found", self.body_top)
             self._footer(draw, message)
             return image, 0
 
