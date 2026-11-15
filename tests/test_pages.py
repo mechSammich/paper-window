@@ -57,6 +57,8 @@ def test_format_task_text_hides_modifiers_but_preserves_other_brackets():
         "[link: text](https://example.com) [unclosed: value"
     )
     assert format_task_text('Review [tags:: [work, home]] [note: "part ] two"] now') == "Review now"
+    unclosed = 'Review [note: ' + '"' * 101 + ' still open'
+    assert format_task_text(unclosed) == unclosed
 
 
 def test_frontmatter_lines_are_not_tasks():
