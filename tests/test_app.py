@@ -64,6 +64,17 @@ def test_replace_page_keeps_selected_task_when_completion_reorders_it():
     assert browser.selected_task.text == "first"
 
 
+def test_set_pages_keeps_selected_task_when_completion_reorders_it():
+    browser = Browser()
+    before = make_page("Tasks.md", f"---\ntags: [{TAG}]\n---\n- [ ] first\n- [ ] second\n", TAG)
+    after = make_page("Tasks.md", f"---\ntags: [{TAG}]\n---\n- [x] first\n- [ ] second\n", TAG)
+    browser.set_pages([before])
+
+    browser.set_pages([after])
+    assert browser.task_index == 1
+    assert browser.selected_task.text == "first"
+
+
 def test_wrap_task_limits_row_width():
     lines = wrap_task("buy oat milk and two loaves of sourdough bread from the shop", 22)
     assert all(len(line) <= 22 for line in lines)

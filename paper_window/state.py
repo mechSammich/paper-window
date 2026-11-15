@@ -29,7 +29,9 @@ class Browser:
 
     def set_pages(self, pages: list[PaperPage]) -> None:
         """Replace the page list, keeping the current page selected when it still exists."""
-        current_path = self.current_page.path if self.current_page else None
+        current_page = self.current_page
+        current_path = current_page.path if current_page else None
+        selected_task = self.selected_task
         self.pages = pages
         self.page_index = 0
         if current_path is not None:
@@ -38,6 +40,12 @@ class Browser:
                     self.page_index = index
                     break
         self._clamp_task()
+        if current_path is not None and self.current_page and self.current_page.path == current_path:
+            if selected_task is not None:
+                for task_index, task in enumerate(self.current_page.tasks):
+                    if task.line_index == selected_task.line_index and task.text == selected_task.text:
+                        self.task_index = task_index
+                        break
 
     def replace_page(self, page: PaperPage) -> None:
         for index, existing in enumerate(self.pages):
