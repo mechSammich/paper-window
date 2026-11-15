@@ -12,6 +12,9 @@ FRONTMATTER_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", 
 TASK_RE = re.compile(r"^\s*[-*+]\s+\[([ xX])\]\s*(.*?)\s*$")
 TASK_STATE_RE = re.compile(r"^(\s*[-*+]\s+\[)([ xX])(\])")
 SILVERBULLET_TAG_RE = re.compile(r"(?<!\w)#[\w][\w/-]*")
+TASK_MODIFIER_RE = re.compile(
+    r"""(?<![\\\[])\[[\w-]+::?(?:"(?:\\.|[^"\\])*"|'(?:''|[^'])*'|\[[^\[\]\r\n]*\]|[^\[\]\r\n])*\](?![\](])"""
+)
 
 
 class StaleTaskError(Exception):
@@ -70,8 +73,9 @@ def extract_tasks(text: str) -> tuple[Task, ...]:
     return tuple(sorted(tasks, key=lambda task: task.done))
 
 
-def strip_silverbullet_tags(text: str) -> str:
-    """Remove inline SilverBullet tags from task text for display."""
+def format_task_text(text: str) -> str:
+    """Hide inline SilverBullet tags and task attributes for display."""
+    text = TASK_MODIFIER_RE.sub("", text)
     text = SILVERBULLET_TAG_RE.sub("", text)
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"\s+([,.;:!?])", r"\1", text)

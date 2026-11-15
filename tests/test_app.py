@@ -125,6 +125,17 @@ def test_renderer_hides_silverbullet_tags_from_task_text():
     assert tagged_image.tobytes() == clean_image.tobytes()
 
 
+def test_renderer_hides_task_modifiers():
+    renderer = Renderer(load_font("", 15), chars_per_row=26)
+    modified_page = page("Tasks", ["Review [due: 2026-11-15] #work [priority: high]"])
+    clean_page = page("Tasks", ["Review"])
+
+    modified_image, _ = renderer.render(modified_page, 1, 1, 0, 0)
+    clean_image, _ = renderer.render(clean_page, 1, 1, 0, 0)
+
+    assert modified_image.tobytes() == clean_image.tobytes()
+
+
 def test_renderer_handles_empty_states():
     renderer = Renderer(load_font("", 15), chars_per_row=26)
     assert renderer.render(None, 0, 0, 0, 0)[0].size == (250, 122)

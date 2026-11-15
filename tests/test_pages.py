@@ -6,7 +6,7 @@ from paper_window.pages import (
     has_tag,
     make_page,
     parse_frontmatter,
-    strip_silverbullet_tags,
+    format_task_text,
     toggle_task_line,
 )
 
@@ -47,7 +47,16 @@ def test_extract_tasks_reports_line_index_and_state():
 
 
 def test_strip_silverbullet_tags_from_task_text():
-    assert strip_silverbullet_tags("Review #work #project/nested, then use C#.") == "Review, then use C#."
+    assert format_task_text("Review #work #project/nested, then use C#.") == "Review, then use C#."
+
+
+def test_format_task_text_hides_modifiers_but_preserves_other_brackets():
+    text = "Review [due: 2026-11-15] report [priority: high] #work, see [notes] and [[Project: notes]]"
+    assert format_task_text(text) == "Review report, see [notes] and [[Project: notes]]"
+    assert format_task_text("[link: text](https://example.com) [unclosed: value") == (
+        "[link: text](https://example.com) [unclosed: value"
+    )
+    assert format_task_text('Review [tags:: [work, home]] [note: "part ] two"] now') == "Review now"
 
 
 def test_frontmatter_lines_are_not_tasks():
