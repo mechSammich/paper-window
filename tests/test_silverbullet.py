@@ -203,7 +203,21 @@ def test_toggle_writes_back_and_updates_page(server):
     updated = index.toggle(page, 0)
     assert server.writes[-1][0] == "Work/Inbox.md"
     assert "- [x] first" in server.writes[-1][1].split("\n")
-    assert updated.tasks[0].done is True
+    assert [(task.text, task.done) for task in updated.tasks] == [("first", True), ("second", True)]
+    reopened = index.toggle(updated, 1)
+    assert "- [ ] second" in server.writes[-1][1].split("\n")
+    assert [(task.text, task.done) for task in reopened.tasks] == [("second", False), ("first", True)]
+
+
+def test_toggle_preserves_task_modifiers(server):
+    server.files["Work/Inbox.md"]["text"] = TAGGED.replace("first", "first [due: 2026-11-15] #work")
+    index = PageIndex(client_for(server), "paper-window")
+    page = index.refresh()[0]
+
+    updated = index.toggle(page, 0)
+
+    assert "- [x] first [due: 2026-11-15] #work" in server.writes[-1][1].split("\n")
+    assert updated.tasks[0].text == "first [due: 2026-11-15] #work"
 
 
 def test_toggle_detects_task_changed_on_server(server):
