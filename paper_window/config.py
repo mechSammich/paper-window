@@ -31,8 +31,8 @@ class ServerConfig:
 @dataclass(frozen=True)
 class DisplayConfig:
     font_path: str = ""
-    font_size: int = 12
-    chars_per_row: int = 30
+    font_size: int = 10
+    chars_per_row: int = 34
 
 
 @dataclass(frozen=True)
