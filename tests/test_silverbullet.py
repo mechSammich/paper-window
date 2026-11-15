@@ -190,7 +190,7 @@ def test_index_returns_only_tagged_pages_and_caches_by_modified_time(server):
     index = PageIndex(client_for(server), "paper-window")
     pages = index.refresh()
     assert [p.name for p in pages] == ["Work/Inbox"]
-    assert [t.text for t in pages[0].tasks] == ["first", "second"]
+    assert [t.text for t in pages[0].tasks] == ["first"]
 
     server.requests.clear()
     index.refresh()
@@ -203,7 +203,7 @@ def test_toggle_writes_back_and_updates_page(server):
     updated = index.toggle(page, 0)
     assert server.writes[-1][0] == "Work/Inbox.md"
     assert "- [x] first" in server.writes[-1][1].split("\n")
-    assert updated.tasks[0].done is True
+    assert [task.text for task in updated.tasks] == []
 
 
 def test_toggle_detects_task_changed_on_server(server):

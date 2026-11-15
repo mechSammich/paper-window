@@ -84,19 +84,30 @@ def test_renderer_uses_inverse_header_selection_and_status_bar():
     assert image.crop((0, footer_y, renderer.width, renderer.height)).getbbox()
 
 
-def test_renderer_draws_completed_task_checkbox():
+def test_renderer_excludes_completed_tasks():
     renderer = Renderer(load_font("", 15), chars_per_row=26)
-    open_page = page("Tasks", ["done"])
-    done_page = make_page(
+    with_completed = make_page(
         "Tasks.md",
-        f"---\ntags: [{TAG}]\n---\n- [x] done\n",
+        f"---\ntags: [{TAG}]\n---\n- [ ] open\n- [x] done\n",
         TAG,
     )
-    open_image, _ = renderer.render(open_page, 1, 1, 0, 0)
-    done_image, _ = renderer.render(done_page, 1, 1, 0, 0)
-    checkbox = (0, renderer.body_top, 20, renderer.body_top + renderer.line_height)
+    open_only = page("Tasks", ["open"])
 
-    assert open_image.crop(checkbox).tobytes() != done_image.crop(checkbox).tobytes()
+    image_with_completed, _ = renderer.render(with_completed, 1, 1, 0, 0)
+    open_only_image, _ = renderer.render(open_only, 1, 1, 0, 0)
+
+    assert image_with_completed.tobytes() == open_only_image.tobytes()
+
+
+def test_renderer_hides_silverbullet_tags_from_task_text():
+    renderer = Renderer(load_font("", 15), chars_per_row=26)
+    tagged_page = page("Tasks", ["Review #work #project/nested"])
+    clean_page = page("Tasks", ["Review"])
+
+    tagged_image, _ = renderer.render(tagged_page, 1, 1, 0, 0)
+    clean_image, _ = renderer.render(clean_page, 1, 1, 0, 0)
+
+    assert tagged_image.tobytes() == clean_image.tobytes()
 
 
 def test_renderer_handles_empty_states():
@@ -140,7 +151,7 @@ def test_app_toggles_task_and_redraws(tmp_path):
         assert fake.files["Work/Inbox.md"]["text"].count("- [x] first") == 1
         assert out.exists()
         app._handle(Action.NEXT_TASK)
-        assert app._browser.selected_task.text == "second"
+        assert app._browser.selected_task is None
     finally:
         httpd.shutdown()
         httpd.server_close()

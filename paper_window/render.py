@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .pages import PaperPage
+from .pages import PaperPage, strip_silverbullet_tags
 
 DISPLAY_WIDTH = 250
 DISPLAY_HEIGHT = 122
@@ -86,7 +86,10 @@ class Renderer:
             self._footer(draw, message)
             return image, 0
 
-        rows = [wrap_task(task.text, self.text_chars)[:capacity] for task in page.tasks]
+        rows = [
+            wrap_task(strip_silverbullet_tags(task.text), self.text_chars)[:capacity]
+            for task in page.tasks
+        ]
         top = visible_range([len(r) for r in rows], selected, scroll_top, capacity)
 
         y = self.body_top

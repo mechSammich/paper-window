@@ -11,6 +11,7 @@ import yaml
 FRONTMATTER_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 TASK_RE = re.compile(r"^\s*[-*+]\s+\[([ xX])\]\s*(.*?)\s*$")
 TASK_STATE_RE = re.compile(r"^(\s*[-*+]\s+\[)([ xX])(\])")
+SILVERBULLET_TAG_RE = re.compile(r"(?<!\w)#[\w][\w/-]*")
 
 
 class StaleTaskError(Exception):
@@ -64,9 +65,17 @@ def extract_tasks(text: str) -> tuple[Task, ...]:
     tasks = []
     for index in range(_body_start(text), len(lines)):
         match = TASK_RE.match(lines[index])
-        if match:
-            tasks.append(Task(index, match.group(2), match.group(1).lower() == "x"))
+        if match and match.group(1).lower() != "x":
+            tasks.append(Task(index, match.group(2), False))
     return tuple(tasks)
+
+
+def strip_silverbullet_tags(text: str) -> str:
+    """Remove inline SilverBullet tags from task text for display."""
+    text = SILVERBULLET_TAG_RE.sub("", text)
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    return text.strip()
 
 
 def make_page(path: str, text: str, tag: str) -> PaperPage | None:
