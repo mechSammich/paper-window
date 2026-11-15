@@ -1,7 +1,7 @@
 import queue
 
 import pytest
-from PIL import ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 from paper_window.buttons import Action
 from paper_window.pages import make_page
@@ -76,6 +76,71 @@ def test_renderer_handles_empty_states():
     assert renderer.render(None, 0, 0, 0, 0)[0].size == (250, 122)
     assert renderer.render(page("Empty", []), 1, 1, 0, 0)[0].size == (250, 122)
     assert renderer.render(None, 0, 0, 0, 0, message="Offline")[0].size == (250, 122)
+
+
+def test_screensaver_is_white_with_only_the_title():
+    renderer = Renderer(load_font("", 15), chars_per_row=26)
+    expected = Image.new("1", (250, 122), 255)
+    ImageDraw.Draw(expected).text((2, 0), "paper window", font=renderer.font, fill=0)
+
+    image = renderer.render_screensaver()
+    assert image.mode == "1"
+    assert image.size == (250, 122)
+    assert image.tobytes() == expected.tobytes()
+
+
+def test_screensaver_startup_inactivity_and_wake(monkeypatch):
+    from paper_window.app import PaperWindowApp
+
+    clock = [0.0]
+    monkeypatch.setattr("paper_window.app.time.monotonic", lambda: clock[0])
+    renderer = Renderer(load_font("", 15), 26)
+    splash = renderer.render_screensaver().tobytes()
+    frames = []
+    refreshes = []
+    toggles = []
+    current_page = page("A", ["first", "second"])
+
+    class Display:
+        def show(self, image):
+            frames.append((clock[0], image.tobytes()))
+
+    class Index:
+        def refresh(self):
+            if not refreshes:
+                assert frames == [(0.0, splash)]
+            refreshes.append(clock[0])
+            return [current_page]
+
+        def toggle(self, selected_page, task_index):
+            toggles.append((clock[0], task_index))
+            return selected_page
+
+    class Events:
+        actions = iter([
+            (0, Action.NEXT_TASK),
+            (100, Action.NEXT_TASK),
+            (699.9, None),
+            (700, None),
+            (800, None),
+            (801, Action.TOGGLE_TASK),
+            (802, Action.TOGGLE_TASK),
+            (803, Action.QUIT),
+        ])
+
+        def get(self, timeout):
+            clock[0], action = next(self.actions)
+            if action is None:
+                raise queue.Empty
+            return action
+
+    app = PaperWindowApp(Index(), renderer, Display(), Events(), 60)
+    app.run()
+
+    assert [time for time, frame in frames if frame == splash] == [0, 700]
+    assert 800 in refreshes
+    assert all(time != 800 for time, _ in frames)
+    assert toggles == [(802, 1)]
 
 
 def test_default_font_fits_about_26_characters_per_row():
