@@ -4,9 +4,10 @@ import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 from paper_window.buttons import Action
-from paper_window.pages import make_page
+from paper_window.pages import group_tasks_by_first_tag, make_page
 from paper_window.render import Renderer, load_font, visible_range, wrap_task
 from paper_window.state import Browser
+from tests.test_silverbullet import server
 
 TAG = "paper-window"
 
@@ -73,6 +74,22 @@ def test_set_pages_keeps_selected_task_when_completion_reorders_it():
     browser.set_pages([after])
     assert browser.task_index == 1
     assert browser.selected_task.text == "first"
+
+
+def test_grouped_selection_tracks_source_when_identical_tasks_reorder():
+    browser = Browser()
+    a = make_page("A.md", f"---\ntags: [{TAG}]\n---\n- [ ] same #work\n", TAG)
+    b = make_page("B.md", f"---\ntags: [{TAG}]\n---\n- [ ] same #work\n", TAG)
+    browser.set_pages(group_tasks_by_first_tag([a, b]))
+    browser.next_task()
+    b_done = make_page("B.md", f"---\ntags: [{TAG}]\n---\n- [x] same #work\n", TAG)
+    a_done = make_page("A.md", f"---\ntags: [{TAG}]\n---\n- [x] same #work\n", TAG)
+    browser.set_pages(group_tasks_by_first_tag([a_done, b]))
+    assert browser.selected_task.source_path == "B.md"
+    assert browser.task_index == 0
+    browser.set_pages(group_tasks_by_first_tag([a_done, b_done]))
+    assert browser.selected_task.source_path == "B.md"
+    assert browser.task_index == 1
 
 
 def test_wrap_task_limits_row_width():
@@ -297,3 +314,42 @@ def test_app_toggles_task_and_redraws(tmp_path):
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_app_groups_and_toggles_tasks_on_their_source_pages(server):
+    from paper_window.app import PaperWindowApp
+    from paper_window.sync import PageIndex
+    from tests.test_silverbullet import client_for
+
+    server.files["Work/Inbox.md"]["text"] = (
+        "---\ntags: [paper-window]\n---\n- [ ] same #work\n- [ ] other #home\n"
+    )
+    server.files["Other.md"] = {
+        "text": "---\ntags: [paper-window]\n---\n- [ ] same #work\n",
+        "modified": 1,
+    }
+    app = PaperWindowApp(PageIndex(client_for(server), TAG), None, None, queue.Queue(), 60)
+    app._refresh()
+    assert [page.name for page in app._browser.pages] == ["#home", "#work"]
+    app._handle(Action.NEXT_PAGE)
+    assert app._browser.selected_task.source_path == "Other.md"
+    app._handle(Action.NEXT_TASK)
+    assert app._browser.selected_task.source_path == "Work/Inbox.md"
+    app._handle(Action.TOGGLE_TASK)
+    assert server.writes[-1][0] == "Work/Inbox.md"
+    assert "- [x] same #work" in server.writes[-1][1]
+    assert app._browser.selected_task.source_path == "Work/Inbox.md"
+    assert app._browser.selected_task.done
+    app._handle(Action.TOGGLE_TASK)
+    assert "- [ ] same #work" in server.writes[-1][1]
+    assert app._browser.selected_task.source_path == "Work/Inbox.md"
+
+    writes_before = len(server.writes)
+    server.files["Work/Inbox.md"]["text"] = server.files["Work/Inbox.md"]["text"].replace(
+        "same #work", "changed #work"
+    )
+    server.files["Work/Inbox.md"]["modified"] += 1
+    app._handle(Action.TOGGLE_TASK)
+    assert len(server.writes) == writes_before
+    assert app._message == "Task changed; refreshing"
+    assert [task.text for task in app._browser.current_page.tasks] == ["same #work", "changed #work"]

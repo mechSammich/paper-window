@@ -8,7 +8,7 @@ import time
 
 from .buttons import Action
 from .display import Display
-from .pages import StaleTaskError
+from .pages import PaperPage, StaleTaskError, group_tasks_by_first_tag
 from .render import Renderer
 from .silverbullet import SilverBulletError
 from .state import Browser
@@ -35,6 +35,7 @@ class PaperWindowApp:
         self._events = events
         self._refresh_seconds = refresh_seconds
         self._browser = Browser()
+        self._source_pages: list[PaperPage] = []
         self._message: str | None = None
 
     def run(self) -> None:
@@ -83,12 +84,17 @@ class PaperWindowApp:
             self._toggle()
 
     def _toggle(self) -> None:
-        page = self._browser.current_page
-        if page is None or not page.tasks:
+        task = self._browser.selected_task
+        if task is None:
             self._message = "No task to toggle"
             return
+        page = next(page for page in self._source_pages if page.path == task.source_path)
+        task_index = next(
+            index for index, source_task in enumerate(page.tasks)
+            if source_task.line_index == task.line_index and source_task.text == task.text
+        )
         try:
-            updated = self._index.toggle(page, self._browser.task_index)
+            updated = self._index.toggle(page, task_index)
         except StaleTaskError:
             self._message = "Task changed; refreshing"
             self._refresh()
@@ -96,7 +102,10 @@ class PaperWindowApp:
             log.error("toggle failed: %s", exc)
             self._message = "Save failed (offline?)"
         else:
-            self._browser.replace_page(updated)
+            self._source_pages = [
+                updated if source.path == updated.path else source for source in self._source_pages
+            ]
+            self._browser.set_pages(group_tasks_by_first_tag(self._source_pages))
 
     def _refresh(self) -> None:
         try:
@@ -105,7 +114,8 @@ class PaperWindowApp:
             log.warning("refresh failed: %s", exc)
             self._message = "Offline; showing last data"
             return
-        self._browser.set_pages(pages)
+        self._source_pages = pages
+        self._browser.set_pages(group_tasks_by_first_tag(pages))
 
     def _draw(self) -> None:
         browser = self._browser

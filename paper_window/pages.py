@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import yaml
@@ -26,6 +26,7 @@ class Task:
     line_index: int
     text: str
     done: bool
+    source_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,28 @@ class PaperPage:
     name: str
     text: str
     tasks: tuple[Task, ...]
+
+
+@dataclass(frozen=True)
+class TagPage:
+    path: str
+    name: str
+    tasks: tuple[Task, ...]
+
+
+def group_tasks_by_first_tag(pages: list[PaperPage]) -> list[TagPage]:
+    """Build display pages from tasks across the source pages."""
+    groups: dict[str, list[Task]] = {}
+    for page in pages:
+        for task in page.tasks:
+            match = SILVERBULLET_TAG_RE.search(task.text)
+            tag = match.group(0) if match else ""
+            groups.setdefault(tag, []).append(replace(task, source_path=page.path))
+
+    return [
+        TagPage(tag, tag or "Untagged", tuple(sorted(groups[tag], key=lambda task: task.done)))
+        for tag in sorted(groups, key=lambda tag: (not tag, tag.lower(), tag))
+    ]
 
 
 def parse_frontmatter(text: str) -> dict[str, Any]:

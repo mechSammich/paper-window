@@ -3,6 +3,7 @@ import pytest
 from paper_window.pages import (
     StaleTaskError,
     extract_tasks,
+    group_tasks_by_first_tag,
     has_tag,
     make_page,
     parse_frontmatter,
@@ -69,6 +70,29 @@ def test_frontmatter_lines_are_not_tasks():
 def test_make_page_requires_tag():
     assert make_page("Shopping.md", PAGE, "paper-window").name == "Shopping"
     assert make_page("Plain.md", "- [ ] nope", "paper-window") is None
+
+
+def test_group_tasks_by_first_tag_across_pages():
+    first = make_page(
+        "A.md",
+        "---\ntags: [paper-window]\n---\n"
+        "- [x] completed #work #home\n- [ ] no tag\n- [ ] home #home\n",
+        "paper-window",
+    )
+    second = make_page(
+        "B.md",
+        "---\ntags: [paper-window]\n---\n"
+        "- [ ] open #work #home\n- [ ] nested #work/project\n- [ ] literal C#\n",
+        "paper-window",
+    )
+    groups = group_tasks_by_first_tag([first, second])
+    assert [group.name for group in groups] == ["#home", "#work", "#work/project", "Untagged"]
+    assert [(task.text, task.source_path) for task in groups[1].tasks] == [
+        ("open #work #home", "B.md"),
+        ("completed #work #home", "A.md"),
+    ]
+    assert [task.text for task in groups[-1].tasks] == ["no tag", "literal C#"]
+    assert group_tasks_by_first_tag([]) == []
 
 
 def test_toggle_task_line_round_trips():
