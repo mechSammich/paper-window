@@ -59,6 +59,11 @@ class Renderer:
         self.line_height = ascent + descent + 2
         self.body_top = self.line_height + 3
 
+    def render_screensaver(self) -> Image.Image:
+        image = Image.new("1", (self.width, self.height), 255)
+        ImageDraw.Draw(image).text((2, 0), "paper window", font=self.font, fill=0)
+        return image
+
     def render(
         self,
         page: PaperPage | None,

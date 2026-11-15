@@ -17,6 +17,7 @@ from .sync import PageIndex
 log = logging.getLogger(__name__)
 
 POLL_SECONDS = 0.2
+INACTIVITY_SECONDS = 10 * 60
 
 
 class PaperWindowApp:
@@ -37,9 +38,11 @@ class PaperWindowApp:
         self._message: str | None = None
 
     def run(self) -> None:
+        self._display.show(self._renderer.render_screensaver())
         self._refresh()
-        self._draw()
         next_refresh = time.monotonic() + self._refresh_seconds
+        last_activity = time.monotonic()
+        screensaver = True
         while True:
             try:
                 action = self._events.get(timeout=POLL_SECONDS)
@@ -49,11 +52,20 @@ class PaperWindowApp:
             if action is Action.QUIT:
                 return
             if action is not None:
-                self._handle(action)
+                last_activity = time.monotonic()
+                if screensaver:
+                    screensaver = False
+                else:
+                    self._handle(action)
                 self._draw()
-            if time.monotonic() >= next_refresh:
+            now = time.monotonic()
+            if not screensaver and now - last_activity >= INACTIVITY_SECONDS:
+                self._display.show(self._renderer.render_screensaver())
+                screensaver = True
+            if now >= next_refresh:
                 self._refresh()
-                self._draw()
+                if not screensaver:
+                    self._draw()
                 next_refresh = time.monotonic() + self._refresh_seconds
 
     def _handle(self, action: Action) -> None:
