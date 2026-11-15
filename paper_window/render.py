@@ -80,7 +80,9 @@ class Renderer:
             self._footer(draw, message)
             return image, 0
 
-        self._header(draw, page.name, f"{page_number}/{page_count}")
+        task_count = len(page.tasks)
+        task_number = selected + 1 if task_count else 0
+        self._header(draw, page.name, f"page {page_number}/{page_count}", f"{task_number}/{task_count}")
         if not page.tasks:
             self._body_message(draw, "No tasks on this page", self.body_top)
             self._footer(draw, message)
@@ -142,16 +144,17 @@ class Renderer:
         self._footer(draw, message)
         return image, top
 
-    def _header(self, draw: ImageDraw.ImageDraw, title: str, right: str) -> None:
+    def _header(self, draw: ImageDraw.ImageDraw, title: str, right: str, task_position: str = "") -> None:
         draw.rectangle((0, 0, self.width - 1, self.line_height), fill=0)
         right_w = draw.textlength(right, font=self.font) if right else 0
         room = self.width - right_w - 8
-        if draw.textlength(title, font=self.font) > room:
-            while title and draw.textlength(title + "...", font=self.font) > room:
+        suffix = f" {task_position}" if task_position else ""
+        if draw.textlength(title + suffix, font=self.font) > room:
+            while title and draw.textlength(title + "..." + suffix, font=self.font) > room:
                 title = title[:-1]
             if title:
                 title += "..."
-        draw.text((2, 1), title, font=self.font, fill=255)
+        draw.text((2, 1), title + (suffix if title else suffix.lstrip()), font=self.font, fill=255)
         if right:
             draw.text((self.width - right_w - 2, 1), right, font=self.font, fill=255)
         draw.line((0, self.line_height, self.width, self.line_height), fill=0)

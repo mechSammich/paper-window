@@ -1,7 +1,7 @@
 import queue
 
 import pytest
-from PIL import ImageFont
+from PIL import ImageDraw, ImageFont
 
 from paper_window.buttons import Action
 from paper_window.pages import make_page
@@ -84,6 +84,46 @@ def test_renderer_produces_1bit_frame_of_display_size():
     assert image.mode == "1"
     assert image.size == (250, 122)
     assert top == 0
+
+
+@pytest.mark.parametrize(
+    ("task_text", "selected", "expected"),
+    [("- [ ] one\n- [x] two", 0, "1/2"), ("- [ ] one\n- [x] two", 1, "2/2"), ("", 0, "0/0")],
+)
+def test_renderer_header_shows_task_and_page_positions(monkeypatch, task_text, selected, expected):
+    renderer = Renderer(load_font("", 15), chars_per_row=26)
+    task_page = make_page("Tasks.md", f"---\ntags: [{TAG}]\n---\n{task_text}\n", TAG)
+    drawn = []
+    original_text = ImageDraw.ImageDraw.text
+
+    def record_text(draw, xy, text, *args, **kwargs):
+        if xy[1] == 1:
+            drawn.append((xy, text))
+        return original_text(draw, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", record_text)
+    renderer.render(task_page, 2, 3, selected, 0)
+
+    assert [text for _, text in drawn] == [f"Tasks {expected}", "page 2/3"]
+
+
+def test_renderer_truncates_long_page_name_before_header_positions(monkeypatch):
+    font = load_font("", 15)
+    renderer = Renderer(font, chars_per_row=26)
+    drawn = []
+    original_text = ImageDraw.ImageDraw.text
+
+    def record_text(draw, xy, text, *args, **kwargs):
+        if xy[1] == 1:
+            drawn.append((xy, text))
+        return original_text(draw, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", record_text)
+    renderer.render(page("A very long page name that cannot fit", ["one", "two"]), 2, 3, 1, 0)
+
+    assert drawn[0][1].endswith("... 2/2")
+    assert drawn[1][1] == "page 2/3"
+    assert drawn[0][0][0] + font.getlength(drawn[0][1]) < drawn[1][0][0]
 
 
 def test_renderer_uses_inverse_header_selection_and_status_bar():
